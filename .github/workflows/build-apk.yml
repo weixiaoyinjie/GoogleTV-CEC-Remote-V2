@@ -1,5 +1,4 @@
-
-name: Build Google TV CEC Remote V3 APK
+name: Build Google TV CEC Remote V3.1 APK
 
 on:
   workflow_dispatch:
@@ -53,6 +52,49 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Fix protobuf empty pairing ACK
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          project = Path(os.environ['PROJECT_DIR'])
+          source = project / 'app/src/main/java/com/cecbridge/remotev2/Proto.java'
+          text = source.read_text()
+          # Read indentation from the actual repository source; fail if it changes.
+          before = '                int count = in.read(payload);\n                if (count != payload.length) throw new IOException("Short protobuf payload");'
+          after = '                if (payload.length > 0) {\n                    int count = in.read(payload);\n                    if (count != payload.length) throw new IOException("Short protobuf payload");\n                }'
+          if before not in text:
+              raise SystemExit('::error::Expected protobuf parser code was not found. Check V3 ZIP contents.')
+          source.write_text(text.replace(before, after, 1))
+          gradle = project / 'app/build.gradle'
+          build = gradle.read_text().replace('versionCode 3', 'versionCode 4').replace("versionName '3.0-test'", "versionName '3.1-pairing-fix'")
+          gradle.write_text(build)
+          print('Fixed Proto.java zero-length nested message handling.')
+          PY
+
+      - name: Test empty protobuf ACK handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ProtoTest.java" <<'JAVA'
+          package com.cecbridge.remotev2;
+          import java.util.*;
+          public class ProtoTest {
+            public static void main(String[] args) throws Exception {
+              for (int field : new int[]{11,31,41}) {
+                byte[] packet = Proto.cat(Proto.uint(1,2), Proto.uint(2,200), Proto.bytes(field,new byte[0]));
+                if (!Proto.has(Proto.parse(packet),field)) throw new AssertionError("ACK " + field);
+              }
+              System.out.println("Pairing ACK protobuf smoke test passed");
+            }
+          }
+          JAVA
+          mkdir -p "$RUNNER_TEMP/prototest"
+          javac -d "$RUNNER_TEMP/prototest" "$PROJECT_DIR/app/src/main/java/com/cecbridge/remotev2/Proto.java" "$RUNNER_TEMP/ProtoTest.java"
+          java -cp "$RUNNER_TEMP/prototest" com.cecbridge.remotev2.ProtoTest
+
       - name: Fix duplicate Bouncy Castle metadata
         shell: bash
         run: |
@@ -79,6 +121,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: GoogleTV-CEC-Remote-V3-APK
+          name: GoogleTV-CEC-Remote-V3.1-APK
           path: app-debug.apk
           if-no-files-found: error
