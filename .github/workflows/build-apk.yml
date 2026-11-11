@@ -12,7 +12,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,7 +22,7 @@ jobs:
           set -euo pipefail
           ZIP_FILE="GoogleTV-CEC-Remote-V3.zip"
           if [ ! -f "$ZIP_FILE" ]; then
-            echo "::error::请先在仓库根目录上传 $ZIP_FILE"
+            echo "::error::Missing $ZIP_FILE in repository root"
             exit 1
           fi
           unzip -tq "$ZIP_FILE"
@@ -31,7 +30,7 @@ jobs:
           unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/cec-src"
           SETTINGS_FILE=$(find "$RUNNER_TEMP/cec-src" -type f -name settings.gradle -print -quit)
           if [ -z "$SETTINGS_FILE" ]; then
-            echo "::error::ZIP 内未找到 settings.gradle"
+            echo "::error::settings.gradle not found in ZIP"
             exit 1
           fi
           echo "PROJECT_DIR=$(dirname "$SETTINGS_FILE")" >> "$GITHUB_ENV"
@@ -46,21 +45,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          test -f "$ANDROID_HOME/platforms/android-35/android.jar" || {
-            echo "::error::Android API 35 is missing on runner"
-            exit 1
-          }
-          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt2" || {
-            echo "::error::Android Build Tools 35.0.0 are missing on runner"
-            exit 1
-          }
-          echo "Android SDK 35 is ready."
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt2"
 
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+
+      - name: Fix duplicate Bouncy Castle metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$PROJECT_DIR/app/build.gradle"
+          cat >> "$PROJECT_DIR/app/build.gradle" <<'GRADLE'
+
+          android {
+              packaging {
+                  resources {
+                      excludes += ['META-INF/versions/9/OSGI-INF/MANIFEST.MF']
+                  }
+              }
+          }
+          GRADLE
 
       - name: Build debug APK
         shell: bash
