@@ -11,7 +11,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -20,18 +21,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f GoogleTV-CEC-Remote-V3.zip ]; then
-            echo "::error::请先把 GoogleTV-CEC-Remote-V3.zip 上传到仓库根目录"
+          ZIP_FILE="GoogleTV-CEC-Remote-V3.zip"
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "::error::请先在仓库根目录上传 $ZIP_FILE"
             exit 1
           fi
+          unzip -tq "$ZIP_FILE"
           mkdir -p "$RUNNER_TEMP/cec-src"
-          unzip -q GoogleTV-CEC-Remote-V3.zip -d "$RUNNER_TEMP/cec-src"
-          settings_file=$(find "$RUNNER_TEMP/cec-src" -type f -name settings.gradle -print -quit)
-          if [ -z "$settings_file" ]; then
+          unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/cec-src"
+          SETTINGS_FILE=$(find "$RUNNER_TEMP/cec-src" -type f -name settings.gradle -print -quit)
+          if [ -z "$SETTINGS_FILE" ]; then
             echo "::error::ZIP 内未找到 settings.gradle"
             exit 1
           fi
-          echo "PROJECT_DIR=$(dirname "$settings_file")" >> "$GITHUB_ENV"
+          echo "PROJECT_DIR=$(dirname "$SETTINGS_FILE")" >> "$GITHUB_ENV"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -39,22 +42,31 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Verify preinstalled Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar" || {
+            echo "::error::Android API 35 is missing on runner"
+            exit 1
+          }
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt2" || {
+            echo "::error::Android Build Tools 35.0.0 are missing on runner"
+            exit 1
+          }
+          echo "Android SDK 35 is ready."
 
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Install Android API 35
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
-
       - name: Build debug APK
         shell: bash
         run: |
           set -euo pipefail
-          gradle -p "$PROJECT_DIR" --no-daemon :app:assembleDebug
+          gradle -p "$PROJECT_DIR" --no-daemon :app:assembleDebug --stacktrace
           cp "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$GITHUB_WORKSPACE/app-debug.apk"
 
       - name: Upload APK
