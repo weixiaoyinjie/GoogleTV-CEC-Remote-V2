@@ -1,4 +1,4 @@
-name: Build Google TV Remote Hub V4.1 APK
+name: Build Google TV Remote Hub V4.2 APK
 
 on:
   workflow_dispatch:
@@ -15,16 +15,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Unpack Google TV Remote Hub V4.1
+      - name: Unpack Google TV Remote Hub V4.2
         shell: bash
         run: |
           set -euo pipefail
-          ZIP="GoogleTV-Remote-Hub-V4.1.zip"
+          ZIP="GoogleTV-Remote-Hub-V4.2.zip"
           test -f "$ZIP" || { echo "::error::Upload $ZIP to the repository root"; exit 1; }
           unzip -tq "$ZIP"
-          mkdir -p "$RUNNER_TEMP/gtv-v4-1"
-          unzip -q "$ZIP" -d "$RUNNER_TEMP/gtv-v4-1"
-          SETTINGS=$(find "$RUNNER_TEMP/gtv-v4-1" -type f -name settings.gradle -print -quit)
+          mkdir -p "$RUNNER_TEMP/gtv-v4-2"
+          unzip -q "$ZIP" -d "$RUNNER_TEMP/gtv-v4-2"
+          SETTINGS=$(find "$RUNNER_TEMP/gtv-v4-2" -type f -name settings.gradle -print -quit)
           test -n "$SETTINGS" || { echo "::error::settings.gradle not found"; exit 1; }
           echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
 
@@ -58,6 +58,6 @@ jobs:
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
-          name: GoogleTV-Remote-Hub-V4.1-APK
+          name: GoogleTV-Remote-Hub-V4.2-APK
           path: app-debug.apk
           if-no-files-found: error
